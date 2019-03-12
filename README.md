@@ -46,7 +46,7 @@ Another option is to install an instance of Vesper on the network gateway (route
 ![An illustration of Vesper's architecture](https://raw.githubusercontent.com/ymirsky/Vesper/master/imgs/usages.png)
 
 
-# The Code
+# The Vesper Tool
 
 ## Implementation Notes: 
 
