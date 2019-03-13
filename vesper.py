@@ -269,7 +269,7 @@ class Monitor:
                 state = '-'
                 score = '-'
                 note = 'In training'
-            table.add_row([ip, state, score, prof,np.round(1/tx_interval,2), str(np.round(probe_time*1000,2)) +' ms', note])
+            table.add_row([ip, state, score, prof,np.round((1/tx_interval)/1000,2), str(np.round(probe_time*1000,2)) +' ms', note])
         os.system('cls' if os.name=='nt' else 'clear')
         print("Vesper Status  --  Runtime: "+ "{:0>8}".format(str(datetime.timedelta(seconds=time.time()-self.start_time))))
         print(table)
