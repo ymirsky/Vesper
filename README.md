@@ -105,7 +105,11 @@ See the [LICENSE](LICENSE) file for details
 
 
 # Citations
-If you use the source code in any way, please cite our paper:
+If you use the source code in any way, please cite:
+
+*Our Black Hat whitepaper*
+
+and
 
 *Mirsky Y, Kalbo N, Elovici Y, Shabtai A. Vesper: Using Echo Analysis to Detect Man-in-the-Middle Attacks in LANs. IEEE Transactions on Information Forensics and Security. 2019 Jun;14(6):1638-53.*
 
