@@ -103,6 +103,11 @@ optional arguments:
 # License
 See the [LICENSE](LICENSE) file for details
 
+# TO DO
+* Add adversarial detection
+* Tune hyperparemeters to differentiate between same model devices
+* Port to Windows
+* Decrease false alarms by introducing custom thesholds (currently using sklearn's lof built-in threshold)
 
 # Citations
 If you use the source code in any way, please cite:
