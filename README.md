@@ -54,15 +54,14 @@ Another option is to install an instance of Vesper on the network gateway (route
 * This implementation uses local outlier factor (LOF) for anomaly detection (BlackHat'19) and not autoencoders (NDSS'18).
 * The current version of vesper has been tuned to detect all of these cases except IP-DH where the exact same model is being used (i.e., the tool can detect the difference between two different 1Gps switches, but not identical ones). The tuned version will be released at a later date.  
 * This tool currently does not currently implement detection of attacks on Vesper itself. 
-* The source code has been tested with Python 2.7.12 on a Linux 64bit machine (Kali). To port the tool to Windows, some C++ libraries must be changed.
-* Python dependencies: prettytable, cython  
+* The source code has been tested with Python 2.7.12 on a Linux 64bit machine (Kali), then ported to Python 3.10.6. To port the tool to Windows, some C++ libraries must be changed.
+* Python dependencies: prettytable, cython, numpy, scikit-learn, matplotlib
 
-To install prettytable and cython, run this in the terminal:
+To install the needed dependencies, run this in the terminal:
 ```
-pip install prettytable cython
+pip install prettytable cython numpy scikit-learn matplotlib
 ```
  
-
 
 ## Using the Tool
 Since the tool uses raw sockets, you **must** run vesper with sudo privileges. For example:

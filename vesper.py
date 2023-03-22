@@ -40,6 +40,8 @@ import datetime
 import matplotlib.pyplot as plt
 from scipy.stats import ks_2samp
 
+sys.settrace
+
 '''
 Run this script from the command line with -h to see instructions and arguments
 
@@ -142,7 +144,7 @@ class Monitor:
                         self.profiles[ip]._last_scores.set_size(self.config['window_size'])
                         self.profiles[ip]._last_labels.set_size(self.config['window_size'])
                     break
-            if not self.profiles.has_key(ip): #did not find profile for the given ip
+            if not ip in self.profiles: #did not find profile for the given ip
                 self.profiles[ip] = Profile(ip, self.config['num_trainprobes'], score_window=self.config['window_size'])
 
         #save current config to disk
@@ -165,10 +167,10 @@ class Monitor:
         # Establish ping intervals for each IP
         print("Establishing ping transmission frequencies...")
         i=0
-        for ip, profile in self.profiles.iteritems():
+        for ip, profile in self.profiles.items():
             if profile.tx_interval == -1:
                 progressbar(len(self.profiles), i + 1, posttext="Sampling: " + profile.ip_addr)
-                self.prober.set_target_ip(profile.ip_addr)
+                self.prober.set_target_ip(bytes(profile.ip_addr,"ascii"))
                 profile.set_tx_interval(self.prober.get_interval())
                 if (profile.tx_interval > 0.001) or (profile.tx_interval < 0):
                     print(profile.ip_addr + " took too long to respond. Using 1Khz.")
@@ -197,13 +199,14 @@ class Monitor:
             # Random order IPs to be probed
             order = np.random.permutation(len(self.targetIPs))
             status = OrderedDict()
+            
             for indx in order:
                 #prep prober
                 targetIP = self.targetIPs[indx]
                 profile = self.profiles[targetIP]
-                self.prober.set_target_ip(targetIP)
+                self.prober.set_target_ip(bytes(targetIP,"ascii"))
                 self.prober.set_ping_interval_sec(profile.tx_interval)
-
+                
                 #probe IP
                 start = time.time()
                 raw_probe = self.prober.probe()
@@ -231,7 +234,7 @@ class Monitor:
 
     def saveProfiles(self):
         print("Saving Profiles...")
-        for ip, profile in self.profiles.iteritems():
+        for ip, profile in self.profiles.items():
             if profile._updated:
                 self.save_obj(profile, os.path.join(self.config['profiles_path'], ip))
 
@@ -240,7 +243,7 @@ class Monitor:
         table = PrettyTable()
         table.field_names = ['IP','Status','Score','Profile','Tx Freq [kH]','Probe Duration', 'Note']
         table.sortby = "IP"
-        for ip, status in status.iteritems():
+        for ip, status in status.items():
             label = status[0]
             score = np.round(status[1],2)
             trainProgress = status[2]
@@ -277,7 +280,7 @@ class Monitor:
 
     def plot_score_setup(self):
         curTime_min = (time.time() - self.start_time) / 60
-        for ip, profile in self.profiles.iteritems():
+        for ip, profile in self.profiles.items():
             y = profile._last_labels.get_mean()
             self.axis.plot(curTime_min, y, label = ip)
         plt.legend(loc='upper left')
