@@ -39,18 +39,30 @@ from sklearn.preprocessing import StandardScaler
 import datetime
 import matplotlib.pyplot as plt
 from scipy.stats import ks_2samp
-
-sys.settrace
+import logging
 
 '''
 Run this script from the command line with -h to see instructions and arguments
 
 #> python vesper.py -h
-
 '''
 
 class Monitor:
-    def __init__(self, profiles_path="vesper_profiles/", target_ips=[""], num_trainprobes=-1, probe_interval=-1, rt_plotting=False, window_size = 20, delete_cache=False):
+    def __init__(self, profiles_path="vesper_profiles/", target_ips=[""], num_trainprobes=-1, probe_interval=-1, rt_plotting=False, window_size = 20, delete_cache=False, log="none"):
+        # Initialize the logger
+        self.log = logging.Logger(__name__)
+        self.log.setLevel(logging.INFO)
+        if log == "none":
+            self.log.disabled = True
+        elif log == "stderr":
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter(
+                fmt="[%(asctime)s] %(levelname)s: %(message)s",
+                datefmt="%Y-%m-%dT%H:%M:%S%zZ")) # ISO 8601 format with timezone offset
+            self.log.addHandler(handler)
+        else:
+            raise Exception(f"Unknown logging backend '{log}'")
+
         #Try to load last used configuration
         retrain = False
         self.initialized = False
@@ -71,8 +83,8 @@ class Monitor:
                             os.remove(os.path.join(self.config['profiles_path'],file))
                     os.rmdir(prof_path)
                 except:
-                    print("Could not remove profile directory: "+prof_path)
-            print("All configurations and profiles have been cleared.")
+                    self.log.error("Could not remove profile directory: "+prof_path)
+            self.log.info("All configurations and profiles have been cleared.")
 
             if self.config is not None:
                 os.remove('config.pkl')
@@ -137,7 +149,12 @@ class Monitor:
         for ip in self.targetIPs:
             for prof in profs:
                 if ip == prof[:-4]:
-                    self.profiles[ip] = self.load_obj(os.path.join(self.config['profiles_path'], ip))
+                    try:
+                        self.profiles[ip] = self.load_obj(os.path.join(self.config['profiles_path'], ip))
+                    except EOFError as e:
+                        self.log.warning(f"Warning: Couldn't read the profile for {ip}. Retraining instead.")
+                        self.log.exception(e)
+                        self.profiles[ip] = Profile(ip, self.config['num_trainprobes'], score_window=self.config['window_size'])
                     if retrain:
                         self.profiles[ip].set_train_size(self.config['num_trainprobes'])
                     if self.profiles[ip].score_window != self.config['window_size']:
@@ -146,6 +163,11 @@ class Monitor:
                     break
             if not ip in self.profiles: #did not find profile for the given ip
                 self.profiles[ip] = Profile(ip, self.config['num_trainprobes'], score_window=self.config['window_size'])
+
+        # Check for root privileges
+        if os.geteuid() != 0:
+            self.log.error("This script needs to be run with sudo, to open raw sockets.")
+            return
 
         #save current config to disk
         self.save_obj(self.config,"config")
@@ -157,7 +179,6 @@ class Monitor:
 
         # Init parallel prober
         print("Loading Prober")
-        print("")
         self.start_time = time.time()
         self.prober = pp.PyParPinger()
         self.establish_ping_intervals()
@@ -171,6 +192,7 @@ class Monitor:
             if profile.tx_interval == -1:
                 progressbar(len(self.profiles), i + 1, posttext="Sampling: " + profile.ip_addr)
                 self.prober.set_target_ip(bytes(profile.ip_addr,"ascii"))
+                
                 profile.set_tx_interval(self.prober.get_interval())
                 if (profile.tx_interval > 0.001) or (profile.tx_interval < 0):
                     print(profile.ip_addr + " took too long to respond. Using 1Khz.")
@@ -184,9 +206,12 @@ class Monitor:
             pkl.dump(obj, f, pkl.HIGHEST_PROTOCOL)
 
     def load_obj(self, name):
+        """
+        Deserialize the saved profile.
+        """
         with open(name + '.pkl', 'rb') as f:
             return pkl.load(f)
-
+            
     def run(self):
         if len(self.targetIPs) == 0:
             raise Exception('Cannot run prober if no target IPs have been set.')
@@ -204,6 +229,7 @@ class Monitor:
                 #prep prober
                 targetIP = self.targetIPs[indx]
                 profile = self.profiles[targetIP]
+                
                 self.prober.set_target_ip(bytes(targetIP,"ascii"))
                 self.prober.set_ping_interval_sec(profile.tx_interval)
                 
@@ -214,7 +240,9 @@ class Monitor:
                 probe_count += 1
 
                 #execute/train profile
+                
                 label, score = profile.process(raw_probe)
+                
                 status[targetIP] = [label,score,profile.trainProgress(),profile.tx_interval,stop-start,profile.n_packets_lost_lastprobe]
 
                 time.sleep(self.config['probe_interval']/1000)
@@ -256,6 +284,7 @@ class Monitor:
             if label == -1:
                 state = 'Abnormal'
                 note = 'Abnormal connection detected'
+                self.alert(ip)
             if label == -2:
                 if score >= 0:
                     state = 'Normal?'
@@ -263,6 +292,7 @@ class Monitor:
                 else:
                     state = 'Abnormal'
                     note = 'Abnormal connection detected. Losing Packets ('+str(lost_packets)+'/1023)'
+                    self.alert(ip)
             if label == -3:
                 state = 'unknown'
                 note = 'Lost connection'
@@ -277,6 +307,9 @@ class Monitor:
         print("Vesper Status  --  Runtime: "+ "{:0>8}".format(str(datetime.timedelta(seconds=time.time()-self.start_time))))
         print(table)
         print("Sent "+"{:,}".format(probe_count)+" probes.")
+
+    def alert(self, ip):
+        self.log.warning(f"Security Alert: Vesper detected a possible Man-in-the-Middle-Attack to {str(ip)}. The connection latency profile has changed. This could also be caused by an intended change in network topology.")
 
     def plot_score_setup(self):
         curTime_min = (time.time() - self.start_time) / 60
@@ -314,6 +347,7 @@ class Monitor:
             plt.draw()
             plt.pause(0.01)
             plt.show(block=False)
+
 
 class Profile:
     def __init__(self,ip,train_size=100,tx_interval=-1,score_window=10):
@@ -354,6 +388,11 @@ class Profile:
         return len(self.samples) < self.train_size
 
     def process(self, raw_probe, printProgress=False):
+        """
+        raw_probe is the probe data generated by parPinger::probe().
+        Returns the label and score.
+        """
+        
         #check probe integrity
         n_lost_packets = np.sum(np.array(raw_probe[1])==0) #number of those with no response
         if n_lost_packets == len(raw_probe[1]): #all packets were lost
@@ -377,7 +416,12 @@ class Profile:
             #train/execute profile
             return self._process(x, printProgress)
 
-    def _process(self, x, printProgress=False, wasPartial=False): #learns and then scores sample. If still in training, 0 is returned.
+    def _process(self, x, printProgress, wasPartial=False):
+        """
+        Learns and then scores sample. 
+        When still in training, special values are returned.
+        """
+
         if self.inTraining() and wasPartial:
             return -2, 1
         if self.inTraining():
@@ -550,11 +594,11 @@ if __name__ == '__main__':
     parser.add_argument('-r',type=int,default=0,help="Sets the wait time <R> between each probe in miliseconds. \nDefault is 0.")
     parser.add_argument('-w',type=int,default=10,help="Sets the sliding window size <W> used to average the anomaly scores. A larger window will provide fewer false alarms, but it will also increase the detection delay. \nDefault is 10.")
     parser.add_argument('--reset',action='store_true',help="Deletes the current configuration and all IP profiles stored on disk before initilizing vesper")
+    parser.add_argument('--log', default="none", choices=["none", "stderr"], type=str, help='Where to log alerts. Possible values are "none" and "stderr". ')
 
-
-    args = parser.parse_known_args()[0]
+    args = parser.parse_args()
 
     make_plot = True if (args.p is not None) else False
-    mon = Monitor(profiles_path=args.f, target_ips=args.i, num_trainprobes=args.t, probe_interval=args.r, rt_plotting=args.p, window_size=args.w, delete_cache = args.reset)
+    mon = Monitor(profiles_path=args.f, target_ips=args.i, num_trainprobes=args.t, probe_interval=args.r, rt_plotting=args.p, window_size=args.w, delete_cache = args.reset, log=args.log)
     if mon.initialized: # False if there was an error or termination during initilization
         mon.run()

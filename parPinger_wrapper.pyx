@@ -41,7 +41,7 @@ cdef extern from "parPinger.hpp" namespace "pinger":
 cdef class PyParPinger:
     cdef parPinger *thisptr      # hold a C++ instance which we're wrapping
     def __cinit__(self, char* ip = "", double ping_interval_sec = -1):
-        self.thisptr = new parPinger(ip, ping_interval_sec, np.uint16(hash(ip)))
+        self.thisptr = new parPinger(ip, ping_interval_sec, np.array(hash(ip)).astype(np.uint16))
     def __dealloc__(self):
         del self.thisptr
     def probe(self):
@@ -51,4 +51,4 @@ cdef class PyParPinger:
     def set_ping_interval_sec(self, double value):
         self.thisptr.set_ping_interval_sec(value)
     def set_target_ip(self, char* ip):
-        self.thisptr.set_target_ip(ip,np.uint16(hash(ip)))
+        self.thisptr.set_target_ip(ip, np.array(hash(ip)).astype(np.uint16))

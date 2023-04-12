@@ -20,7 +20,7 @@ namespace pinger
             ping_interval_sec = 0.0001;
         this->set_ping_interval_sec(ping_interval_sec);
         this->pir_count = 0;
-        this->MLSgen.setBits(10); //1023 length
+        this->MLSgen.setBits(10); //1023 length        
   }
   parPinger::~parPinger() {}
 
@@ -51,7 +51,9 @@ namespace pinger
     pthread_create(&probeRecverThread, NULL, parPinger::recvMain, (void*)this);
     pthread_create(&probeSenderThread, NULL, parPinger::sendMain, (void*)this);
 
-    pthread_join(probeRecverThread,NULL);//wait for threads to complete
+    //wait for threads to complete
+    pthread_join(probeRecverThread,NULL);
+    
     return curResult;
   }
 
@@ -98,6 +100,7 @@ void* parPinger::recvMain(void *args)
         free(packet);
         return NULL;
     }
+ 
     // Watch for socket inputs.
     FD_ZERO(&rfds);
     FD_SET(s, &rfds);
@@ -163,6 +166,8 @@ void* parPinger::recvMain(void *args)
         if(rx_count == prthr->currPIR_MLS.size())
             break;
     }
+
+       
 
     /*Clean up*/
     close(s);
@@ -241,6 +246,8 @@ void* parPinger::recvMain(void *args)
     result.push_back(MLS_SEQ);
     prthr->curResult = result;
     recv_times.clear();
+
+    return NULL;
 }
 
 
@@ -300,6 +307,7 @@ struct timespec parPinger::tsSubtract (struct  timespec  time1, struct  timespec
     prthr->pir_count++;//update id for current pir
     prthr->send_probe(prthr->targetIP, prthr->currPIR_MLS, prthr->threadID);
 
+    return NULL;
   }
 
 
