@@ -21,6 +21,8 @@
 
 import os
 import subprocess
+
+# FIXME: This doesn't detect changes to the code.
 if not os.path.isfile("parPinger_wrapper.cpp"): # has not yet been compiled by cython
     print("Compiling required Cython libraries")
     cmd = "python setup.py build_ext --inplace"
@@ -457,23 +459,31 @@ class Profile:
             return -1 if m_label < 0 else 1
 
     def extract_features(self,raw_probe):
+        """
+        What these features mean is discussed in `4.4. Feature Extractor (FE)` of the paper.
+        """
+
         tx_times = np.array(raw_probe[0])
         rx_times = np.array(raw_probe[1])
         mls_seq = np.array(raw_probe[2])
 
         # Feature 1: v_ie
+        # Total energy of impulse
         rtt = rx_times - tx_times
         rtt_f = np.fft.fft(rtt)
         mls_seq_f = np.fft.fft(mls_seq)
-        v_ie = np.sum(np.abs((rtt_f / mls_seq_f)) ** 2) / len(rtt_f)  # total energy of impulse
+        v_ie = np.sum(np.abs((rtt_f / mls_seq_f)) ** 2) / len(rtt_f)
 
         # Feature 2: v_dc
-        if (mls_seq == 0).all():  # should not happen (means MLS was all zeros)
+        # The mean round trip time of the largest payload pings
+        if (mls_seq == 0).all():  
+            # should not happen (means MLS was all zeros)
             v_dc = np.mean(rtt)
         else:
-            v_dc = np.mean(rtt[mls_seq == 1])  # the average rtt of the largest payload pings
+            v_dc = np.mean(rtt[mls_seq == 1])
 
         # Feature 3: v_jit
+        # Log-likelihood of the Jitter’s Distribution. (But capped to 0 or 1).
         jitter = np.diff(rx_times, n=1)
         if len(self.KS_population) == 0:
             m_pv = 1
@@ -491,6 +501,8 @@ class Profile:
                 self.KS_population.append(jitter)
                 self.KS_population = self.KS_population[np.max((len(self.KS_population)-set_size,0)):]
                 self._updated = True
+        
+        # FIXME: Make this a class. This ad-hoc definition is used in several places.
         return np.array([[v_ie, v_dc, v_jit]])
 
     def extract_features_partial(self,raw_probe):
