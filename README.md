@@ -110,6 +110,12 @@ See the [LICENSE](LICENSE) file for details
 * Port to Windows
 * Decrease false alarms by introducing custom thesholds (currently using sklearn's lof built-in threshold)
 
+# Known Problems
+* There are race conditions and memory corruption in parPinger.cpp.
+  Especially with heavy packet loss or unexpected ping responses, Vesper crashes.
+* The Probe Duration is unpredictable and can get very high (>60sec) with lossy connections.
+* When there is no connection, Vesper tries to sample frequencies for minutes before settling on a default.
+
 # Citations
 If you use the source code in any way, please cite:
 
