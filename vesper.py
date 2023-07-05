@@ -125,6 +125,8 @@ class Monitor:
         #Load list of target IPs (if exists)
         self.targetIPs = []
         if self.config['target_ips'][0][-4:] == ".csv":
+            if len(self.config['target_ips']) != 1:
+                raise Exception("Only one file with target IPs is supported, but got " + len(self.config['target_ips']))
             ipfile = self.config['target_ips'][0]
             if os.path.isfile(ipfile):
                 file = open(ipfile, 'r')
@@ -132,7 +134,8 @@ class Monitor:
                 file.close()
                 if len(ips) == 0:
                     raise Exception(ipfile +" is empty. Type 'vesper -h' for help")
-                self.targetIPs = [ip.rstrip() for ip in ips]
+                # remove trailing whitespace and empty entries.
+                self.targetIPs = [ip.rstrip() for ip in ips if ip != ""]
             else:
                 raise Exception("Can't find "+ipfile+". Type 'vesper -h' for help")
         elif self.config['target_ips'][0] != "":
