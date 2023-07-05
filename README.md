@@ -59,8 +59,10 @@ Another option is to install an instance of Vesper on the network gateway (route
 
 To install the needed dependencies, run this in the terminal:
 ```
-pip install prettytable cython numpy scikit-learn matplotlib
+sudo apt install python3-pip python-is-python3
+sudo pip install prettytable cython numpy scikit-learn matplotlib
 ```
+Note that pip is run with sudo. This makes sure that python findes the packages when run with sudo itself.
  
 
 ## Using the Tool
