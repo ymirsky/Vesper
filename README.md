@@ -59,8 +59,10 @@ Another option is to install an instance of Vesper on the network gateway (route
 
 To install the needed dependencies, run this in the terminal:
 ```
-pip install prettytable cython numpy scikit-learn matplotlib
+sudo apt install python3-pip python-is-python3
+sudo pip install prettytable cython numpy scikit-learn matplotlib
 ```
+Note that pip is run with sudo. This makes sure that python findes the packages when run with sudo itself.
  
 
 ## Using the Tool
@@ -107,6 +109,12 @@ See the [LICENSE](LICENSE) file for details
 * Tune hyperparemeters to differentiate between same model devices
 * Port to Windows
 * Decrease false alarms by introducing custom thesholds (currently using sklearn's lof built-in threshold)
+
+# Known Problems
+* There are race conditions and memory corruption in parPinger.cpp.
+  Especially with heavy packet loss or unexpected ping responses, Vesper crashes.
+* The Probe Duration is unpredictable and can get very high (>60sec) with lossy connections.
+* When there is no connection, Vesper tries to sample frequencies for minutes before settling on a default.
 
 # Citations
 If you use the source code in any way, please cite:

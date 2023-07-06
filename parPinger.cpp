@@ -9,6 +9,9 @@
 #include <limits>
 #include <iomanip>
 
+/* How much extra data to send in long ICMP packet */
+#define PING_PAYLOAD_LEN 1500
+
 namespace pinger
 {
   parPinger::parPinger(char* ip, double ping_interval_sec, uint16_t threadID)
@@ -68,7 +71,9 @@ void* parPinger::recvMain(void *args)
     clock_gettime(CLOCK_MONOTONIC, &rx.t);
 
     /*Setup receive socket*/
-    int s, i, cc, packlen, datalen = 1500 + ICMP_MINLEN;
+    int s;
+    int datalen = PING_PAYLOAD_LEN + ICMP_MINLEN;
+    int packlen = datalen + MAXIPLEN + MAXICMPLEN;
     struct sockaddr_in to, from;
     fd_set rfds;
     int ret, fromlen, hlen;
@@ -76,7 +81,7 @@ void* parPinger::recvMain(void *args)
     struct icmp *icp;
     to.sin_family = AF_INET;
     string hostname;
-    u_char *packet, outpack[MAXPACKET];
+    u_char *packet;
     struct ip *ip;
 
     // try to convert as dotted decimal address, else if that fails assume it's a hostname
@@ -88,7 +93,6 @@ void* parPinger::recvMain(void *args)
         cerr << "unknown host "<< prthr->targetIP << endl;
         return NULL;
     }
-    packlen = datalen + MAXIPLEN + MAXICMPLEN;
     if ( (packet = (u_char *)malloc((u_int)packlen)) == NULL)
     {
         cerr << "malloc error\n";
@@ -107,13 +111,13 @@ void* parPinger::recvMain(void *args)
 
     // Timeout: after each reception, wait up to X micro seconds before giving up on remaining replies.
     timeval timeout;
-    struct timespec curTime;
 
     /* Main loop */
-    int rx_count = 0;
+    uint rx_count = 0;
     for(;;)
     {
         /* Receive ICMP ECHO Response */
+        // FIXME This timeout is very long. pings should be <1ms in a LAN.
         timeout.tv_sec = 2;
         timeout.tv_usec = 0;
 
@@ -188,7 +192,7 @@ void* parPinger::recvMain(void *args)
     long indx_cntr = 0;
     bool missing = false;
     int misscount=0;
-    for(int i=0;i<prthr->send_times.size();i++)//assume that replies are in same order as requests
+    for(uint i = 0; i < prthr->send_times.size(); i++)//assume that replies are in same order as requests
     {
         indx_cntr++;
         indexes[i] = indx_cntr;
@@ -234,7 +238,7 @@ void* parPinger::recvMain(void *args)
     vector<long double> RX_TIMES;
     vector<long double> MLS_SEQ;
 
-    for(int i = 0; i < indexes.size(); i++){
+    for(uint i = 0; i < indexes.size(); i++){
         TX_TIMES.push_back(prthr->ts2ld(prthr->send_times[i].t));
         RX_TIMES.push_back(prthr->ts2ld(rx_ts[i]));
         MLS_SEQ.push_back((long double)prthr->currPIR_MLS[i]);
@@ -297,7 +301,6 @@ struct timespec parPinger::tsSubtract (struct  timespec  time1, struct  timespec
   {
     /* Prepare for Probe */
     parPinger* prthr = (parPinger*)args;
-    struct timespec curTime;
     prthr->burstTime = 9999999; //init the time it took to send the burst
     usleep(100000); // 100ms
 
@@ -316,13 +319,13 @@ struct timespec parPinger::tsSubtract (struct  timespec  time1, struct  timespec
 double parPinger::get_interval()
 {
     double sumRTTs = 0;
-    int s, i, cc, packlen, datalen = 1500;
-    struct hostent *hp;
+    int s;
+    int datalen = PING_PAYLOAD_LEN;
+    int packlen = datalen + MAXIPLEN + MAXICMPLEN;
     struct sockaddr_in to, from;
     //struct protoent	*proto;
     struct ip *ip;
     u_char *packet, outpack[MAXPACKET];
-    char hnamebuf[MAXHOSTNAMELEN];
     string hostname;
     struct icmp *icp;
     int ret, fromlen, hlen;
@@ -345,7 +348,7 @@ double parPinger::get_interval()
         cerr << "unknown host "<< targetIP << endl;
         return -1;
     }
-    packlen = datalen + MAXIPLEN + MAXICMPLEN;
+    
     if ( (packet = (u_char *)malloc((u_int)packlen)) == NULL)
     {
         cerr << "malloc error\n";
@@ -370,7 +373,7 @@ double parPinger::get_interval()
         icp->icmp_id = my_tid % 65000;
 
 
-        cc = datalen + ICMP_MINLEN;
+        int cc = datalen + ICMP_MINLEN;
         icp->icmp_cksum = in_cksum((unsigned short *)icp,cc);
 
         // Watch stdin (fd 0) to see when it has input.
@@ -380,7 +383,7 @@ double parPinger::get_interval()
         tv.tv_sec = 0;
         tv.tv_usec = 200000;
 
-        i = sendto(s, (char *)outpack, cc, 0, (struct sockaddr*)&to, (socklen_t)sizeof(struct sockaddr_in));
+        int i = sendto(s, (char *)outpack, cc, 0, (struct sockaddr*)&to, (socklen_t)sizeof(struct sockaddr_in));
         clock_gettime(CLOCK_MONOTONIC, &start); //use CLOCK_MONOTONIC in deployment
 
         if (i < 0 || i != cc)
@@ -418,6 +421,7 @@ double parPinger::get_interval()
                 }
 
                 // Check the IP header
+                // FIXME: This doesn't check the actual header length, but the size of the C struct.
                 ip = (struct ip *)((char*)packet);
                 hlen = sizeof( struct ip );
                 if (ret < (hlen + ICMP_MINLEN))
@@ -508,11 +512,10 @@ uint16_t parPinger::in_cksum(uint16_t *addr, unsigned len)
 int parPinger::send_probe(string target_ip, vector<bool> mls_seq, uint16_t scanner_id)
 {
     /* Open Sending Socket */
-    int s, i, cc, packlen, datalen = 1500;
-    struct hostent *hp;
-    struct sockaddr_in to, from;
-    //struct protoent	*proto;
-    struct ip *ip;
+    int s;
+    int datalen = PING_PAYLOAD_LEN;
+    int packlen = datalen + MAXIPLEN + MAXICMPLEN;
+    struct sockaddr_in to;
     u_char *packet, outpack[MAXPACKET];
     string hostname;
     struct icmp *icp;
@@ -529,7 +532,7 @@ int parPinger::send_probe(string target_ip, vector<bool> mls_seq, uint16_t scann
         cerr << "unknown host "<< target_ip << endl;
         return -1;
     }
-    packlen = datalen + MAXIPLEN + MAXICMPLEN;
+
     if ( (packet = (u_char *)malloc((u_int)packlen)) == NULL)
     {
         cerr << "malloc error\n";
@@ -550,7 +553,7 @@ int parPinger::send_probe(string target_ip, vector<bool> mls_seq, uint16_t scann
     icp->icmp_cksum = 0;
     icp->icmp_seq = 0;	/* seq and id must be reflected */
     icp->icmp_id = scanner_id;
-    cc = datalen + ICMP_MINLEN;
+    int cc = datalen + ICMP_MINLEN;
     icp->icmp_cksum = in_cksum((unsigned short *)icp,cc);
     struct timespec tmp;
 
@@ -565,7 +568,7 @@ int parPinger::send_probe(string target_ip, vector<bool> mls_seq, uint16_t scann
     int count = 0;
     point tx;
 
-    for(int k = 0; k < mls_seq.size(); k++)
+    for(uint k = 0; k < mls_seq.size(); k++)
     {
         //calc wait time
         wait_time.tv_nsec = max(ping_interval.tv_nsec - (i_stop.tv_nsec - i_start.tv_nsec) - 70000, 0L );
@@ -577,14 +580,14 @@ int parPinger::send_probe(string target_ip, vector<bool> mls_seq, uint16_t scann
         nanosleep(&wait_time,&tmp);
 
         //setup ping
-        cc = ((int)mls_seq[k])*1500 + ICMP_MINLEN;
+        cc = ((int)mls_seq[k]) * PING_PAYLOAD_LEN + ICMP_MINLEN;
 
         //update checksum
         icp->icmp_cksum = 0;
         icp->icmp_cksum = in_cksum((unsigned short *)icp,cc);
         //send
         clock_gettime(CLOCK_MONOTONIC, &i_start);
-        i = sendto(s, (char *)outpack, cc, 0, (struct sockaddr*)&to, (socklen_t)sizeof(struct sockaddr_in));
+        int i = sendto(s, (char *)outpack, cc, 0, (struct sockaddr*)&to, (socklen_t)sizeof(struct sockaddr_in));
         tx.indx = icp->icmp_seq;
         tx.t = i_start;
         send_times.push_back(tx);
